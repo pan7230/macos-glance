@@ -205,22 +205,32 @@ final class MetricRow: NSView {
 
 // MARK: - 菜单栏标题（用系统原生 attributedTitle，自动适配深浅色）
 
-/// 菜单栏标题：支持上下双行，行高与行距固定，避免在菜单栏里忽上忽下。
-func makeStatusTitle(_ lines: [String]) -> NSAttributedString {
-    let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-    // 固定每行高度与行距，保证两行间距恒定、垂直居中
+/// MangoDisk 风格菜单栏项：上行小标签 + 下行数值，青绿色，行高固定。
+/// 用 attributedTitle 让系统处理菜单栏着色与布局；青绿色为固定色（与 MangoDisk 一致）。
+func makeMetricTitle(label: String, value: String) -> NSAttributedString {
+    // 菜单栏图标青绿色（MangoDisk 观感）
+    let teal = NSColor(calibratedRed: 0.23, green: 0.62, blue: 0.64, alpha: 1.0)
+    let labelFont = NSFont.systemFont(ofSize: 7.5, weight: .semibold)
+    let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+
     let style = NSMutableParagraphStyle()
     style.alignment = .center
     style.lineSpacing = 0
-    style.minimumLineHeight = 10
-    style.maximumLineHeight = 10
-    let attrs: [NSAttributedString.Key: Any] = [
-        .font: font,
-        .foregroundColor: NSColor.labelColor,
+    style.minimumLineHeight = 9
+    style.maximumLineHeight = 9
+
+    let result = NSMutableAttributedString()
+    result.append(NSAttributedString(string: label, attributes: [
+        .font: labelFont,
+        .foregroundColor: teal.withAlphaComponent(0.85),
         .paragraphStyle: style
-    ]
-    let text = lines.isEmpty ? "—" : lines.joined(separator: "\n")
-    return NSAttributedString(string: text, attributes: attrs)
+    ]))
+    result.append(NSAttributedString(string: "\n" + value, attributes: [
+        .font: valueFont,
+        .foregroundColor: teal,
+        .paragraphStyle: style
+    ]))
+    return result
 }
 
 // 保留：模板图版本（back-up，当前未使用）

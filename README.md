@@ -5,22 +5,27 @@
 
 ## 功能
 
-- **菜单栏常驻**：纯文字实时显示 CPU、内存、网络上下行（可在面板里勾选显示项）
-- **点击弹出详情面板**：CPU / 内存 / 网络（带 60 秒走势图）/ 磁盘容量与读写 / CPU 温度 / 风扇
+- **菜单栏常驻**：MangoDisk 风格——每个指标一个独立小项，上标签下数值、青绿色；8 项可勾选（CPU%、CPU温度、GPU%、GPU温度、内存%、磁盘温度、网络、功耗）
+- **点击弹出详情面板**：标签页 + 卡片式（概览 / CPU / GPU / 内存 / 磁盘 / 网络），仿 MangoDisk 布局
 - **开机自启**：面板内一键开关（基于 SMAppService）
 - **右键菜单**：刷新一次 / 退出
 
-## 数据来源（全部系统接口，无授权弹窗）
+## 数据来源（全部系统接口，无授权弹窗、无需 root）
 
 | 指标 | 接口 |
 |---|---|
 | CPU | `host_processor_info` |
 | 内存 | `host_statistics64`（活动监视器口径：App 内存 + 有线 + 压缩） |
 | 网络 | `sysctl(NET_RT_IFLIST2)`，只统计物理网卡（en*），VPN 虚拟网卡不计重复 |
-| 磁盘容量 | `NSURL volumeAvailableCapacity` |
-| 磁盘读写 | IOKit `IOBlockStorageDriver` Statistics |
-| CPU 温度 | IOHID 私有接口（只读，无需授权），取全部 tdie 核心传感器最高值 |
-| 风扇 | SMC `F0Ac`，无风扇机型自动隐藏为"无风扇机型" |
+| 磁盘容量 / 读写 | `NSURL volumeAvailableCapacity` / IOKit `IOBlockStorageDriver` |
+| CPU 温度 | IOHID 私有接口，取全部 tdie 核心传感器最高值 |
+| 磁盘温度 | IOHID `NAND CH0 temp` 传感器 |
+| GPU 温度 | IOHID tdev 传感器平均值（Apple Silicon GPU 与 CPU 共享 die，为近似值） |
+| GPU 占用 | IOReport `GPU Stats` 的 `GPUPH` 状态 residency（非 OFF 占比） |
+| 系统功耗 | IOReport `Energy Model` 聚合通道；部分机型该组无 CPU 通道会显示"—" |
+| 风扇 | SMC `F0Ac`，无风扇机型自动隐藏 |
+
+> GPU 占用 / 功耗走 `libIOReport.dylib`（私有框架，dlopen 动态加载，失败自动降级）。采样逻辑封装在 `Sources/c/ioreport.c`，避免 Swift 调私有 C API 的 ABI 问题。已实测：GPU 空闲 0%、负载 100%。
 
 ## 下载安装
 

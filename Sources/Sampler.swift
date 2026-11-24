@@ -17,6 +17,10 @@ struct Snapshot {
     var diskWrite: Double = 0
     var cpuTemp: Double? = nil       // 摄氏度
     var fanRPM: Int? = nil           // 无风扇机型为 nil
+    var diskTemp: Double? = nil      // 磁盘温度（NAND 传感器）
+    var gpuTemp: Double? = nil       // GPU 温度（tdev 传感器近似）
+    var gpuUtil: Double? = nil       // GPU 占用 0...1（IOReport）
+    var power: Double? = nil         // 系统功耗 W（IOReport）
     var uptime: TimeInterval = 0
     var time: Date = Date()
 }
@@ -39,6 +43,7 @@ final class Sampler {
 
     private let tempReader = HIDTemperatureReader()
     private let smcReader = SMCReader()
+    private let ioReader = IOReportReader()
 
     init() {
         // 预热一次，避免第一次采样没有基线而显示 0
@@ -84,7 +89,12 @@ final class Sampler {
         prevDisk = io
 
         snap.cpuTemp = tempReader.maxDieTemperature()
+        snap.diskTemp = tempReader.temperature(containing: "nand")
+        snap.gpuTemp = tempReader.averageTemperature(containing: "tdev")
         snap.fanRPM = smcReader.fanRPM()
+        let ioreport = ioReader.sample()
+        snap.gpuUtil = ioreport.gpu
+        snap.power = ioreport.power
         return snap
     }
 
@@ -288,5 +298,56 @@ final class HIDTemperatureReader {
             }
         }
         return best
+    }
+
+    /// 按名称关键字求一组温度传感器的平均值（如 "tdev" = GPU/协处理器 die 近似）。
+    func averageTemperature(containing keyword: String) -> Double? {
+        if Date().timeIntervalSince(nameCacheTime) > 60 || serviceList.isEmpty {
+            ensureClient()
+            let arr = IOHIDEventSystemClientCopyServices(client!)?.takeRetainedValue() as? [CFTypeRef] ?? []
+            nameCache = [:]
+            for sv in arr {
+                if let name = IOHIDServiceClientCopyProperty(sv, "Product" as CFString)?
+                    .takeRetainedValue() as? String {
+                    nameCache[name] = sv
+                }
+            }
+            nameCacheTime = Date()
+        }
+        var sum = 0.0; var cnt = 0
+        for (name, service) in nameCache {
+            guard name.lowercased().contains(keyword.lowercased()) else { continue }
+            guard let ev = IOHIDServiceClientCopyEvent(service, kHIDEventTypeTemperature, 0, 0)?
+                .takeRetainedValue() else { continue }
+            let t = IOHIDEventGetFloatValue(ev, kHIDEventFieldTemperatureLevel)
+            if t > 1, t < 130 { sum += t; cnt += 1 }
+        }
+        return cnt > 0 ? sum / Double(cnt) : nil
+    }
+
+    /// 按名称关键字找温度传感器（如 "nand" = 磁盘）。结果缓存，避免每秒全量枚举。
+    private var nameCache: [String: CFTypeRef] = [:]
+    private var nameCacheTime = Date.distantPast
+    func temperature(containing keyword: String) -> Double? {
+        if Date().timeIntervalSince(nameCacheTime) > 60 || serviceList.isEmpty {
+            ensureClient()
+            let arr = IOHIDEventSystemClientCopyServices(client!)?.takeRetainedValue() as? [CFTypeRef] ?? []
+            nameCache = [:]
+            for s in arr {
+                if let name = IOHIDServiceClientCopyProperty(s, "Product" as CFString)?
+                    .takeRetainedValue() as? String {
+                    nameCache[name] = s
+                }
+            }
+            nameCacheTime = Date()
+        }
+        for (name, service) in nameCache {
+            guard name.lowercased().contains(keyword.lowercased()) else { continue }
+            guard let ev = IOHIDServiceClientCopyEvent(service, kHIDEventTypeTemperature, 0, 0)?
+                .takeRetainedValue() else { continue }
+            let t = IOHIDEventGetFloatValue(ev, kHIDEventFieldTemperatureLevel)
+            if t > 1, t < 130 { return t }
+        }
+        return nil
     }
 }

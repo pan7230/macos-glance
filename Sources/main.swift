@@ -4,14 +4,33 @@ import ServiceManagement
 // MARK: - 菜单栏显示项
 
 enum BarItem: String, CaseIterable {
-    case cpu, mem, net, disk
+    case cpu, cpuTemp, gpu, gpuTemp, mem, diskTemp, net, power
 
+    /// 面板开关上的中文名
     var title: String {
         switch self {
         case .cpu: return "CPU"
+        case .cpuTemp: return "CPU温度"
+        case .gpu: return "GPU"
+        case .gpuTemp: return "GPU温度"
         case .mem: return "内存"
+        case .diskTemp: return "磁盘温度"
         case .net: return "网络"
-        case .disk: return "磁盘"
+        case .power: return "功耗"
+        }
+    }
+
+    /// 菜单栏上的英文小标签（MangoDisk 风格）
+    var label: String {
+        switch self {
+        case .cpu: return "CPU"
+        case .cpuTemp: return "CPU"
+        case .gpu: return "GPU"
+        case .gpuTemp: return "GPU"
+        case .mem: return "MEM"
+        case .diskTemp: return "DISK"
+        case .net: return "NET"
+        case .power: return "SYS"
         }
     }
 }
@@ -23,9 +42,10 @@ final class Settings {
     var barItems: Set<BarItem> {
         get {
             guard let raw = store.array(forKey: "barItems") as? [String] else {
-                return [.cpu, .mem, .net]
+                return Set(BarItem.allCases)   // 默认全开
             }
-            return Set(raw.compactMap(BarItem.init(rawValue:)))
+            let parsed = Set(raw.compactMap(BarItem.init(rawValue:)))
+            return parsed.isEmpty ? Set(BarItem.allCases) : parsed
         }
         set {
             store.set(newValue.map { $0.rawValue }.sorted(), forKey: "barItems")
@@ -37,7 +57,8 @@ final class Settings {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private var statusItem: NSStatusItem!
+    private var statusItems: [BarItem: NSStatusItem] = [:]
+    private var lastValues: [BarItem: String] = [:]
     private let panel = PanelViewController()
     private lazy var popover: NSPopover = {
         let p = NSPopover()
@@ -56,12 +77,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.attributedTitle = makeStatusTitle(["启动中"])
-            button.target = self
-            button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        // MangoDisk 风格：每个指标一个独立状态项
+        for item in BarItem.allCases where Settings.shared.barItems.contains(item) {
+            let si = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            if let button = si.button {
+                button.attributedTitle = makeMetricTitle(label: item.label, value: "…")
+                button.target = self
+                button.action = #selector(statusItemClicked(_:))
+                button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            }
+            statusItems[item] = si
         }
 
         // 不在启动时强制构建 panel.view：popover 首次显示时会自行懒加载，
@@ -69,14 +94,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = panel.preferredSize
 
         panel.onToggleBarItem = { [weak self] item, on in
+            guard let self else { return }
             var items = Settings.shared.barItems
             if on { items.insert(item) } else { items.remove(item) }
             Settings.shared.barItems = items
-            self?.lastTitle = ""
-            if let snap = self?.latest { self?.updateBar(snap) }
+            self.applyStatusItemPresence()
+            if let snap = self.latest { self.updateBar(snap) }
         }
         panel.onQuit = { NSApp.terminate(nil) }
         panel.onToggleLogin = { [weak self] on in self?.setLoginItem(on) }
+        panel.onSizeChange = { [weak self] size in
+            self?.popover.contentSize = size
+        }
 
         startTimer()
     }
@@ -99,35 +128,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timer = t
     }
 
+    /// 按当前开关增删状态项（开关变化时调用）
+    private func applyStatusItemPresence() {
+        let enabled = Settings.shared.barItems
+        // 移除已关闭的
+        for (item, si) in statusItems where !enabled.contains(item) {
+            NSStatusBar.system.removeStatusItem(si)
+            statusItems[item] = nil
+            lastValues[item] = nil
+        }
+        // 添加新开启的
+        for item in BarItem.allCases where enabled.contains(item) && statusItems[item] == nil {
+            let si = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            if let button = si.button {
+                button.attributedTitle = makeMetricTitle(label: item.label, value: "…")
+                button.target = self
+                button.action = #selector(statusItemClicked(_:))
+                button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            }
+            statusItems[item] = si
+        }
+    }
+
+    /// 每项独立渲染（MangoDisk 风格：上小标签 + 下数值）
     private func updateBar(_ snap: Snapshot) {
-        let items = Settings.shared.barItems
-
-        // 第一行：CPU / 内存 / 磁盘；第二行：网络
-        var top: [String] = []
-        var bottom: [String] = []
-
-        if items.contains(.cpu) {
-            top.append("CPU\(Fmt.percent(snap.cpu))%")
+        let memPct = snap.memTotal > 0 ? Double(snap.memUsed) / Double(snap.memTotal) : 0
+        let values: [BarItem: String] = [
+            .cpu: "\(Fmt.percent(snap.cpu))%",
+            .cpuTemp: snap.cpuTemp.map { "\(Int($0.rounded()))°" } ?? "—",
+            .gpu: snap.gpuUtil.map { "\(Fmt.percent($0))%" } ?? "—",
+            .gpuTemp: snap.gpuTemp.map { "\(Int($0.rounded()))°" } ?? "—",
+            .mem: "\(Fmt.percent(memPct))%",
+            .diskTemp: snap.diskTemp.map { "\(Int($0.rounded()))°" } ?? "—",
+            .net: "↓\(Fmt.compactRate(snap.netDown))↑\(Fmt.compactRate(snap.netUp))",
+            .power: snap.power.map { "\(String(format: "%.0f", $0))W" } ?? "—"
+        ]
+        for (item, value) in values {
+            guard let si = statusItems[item] else { continue }
+            guard lastValues[item] != value else { continue }  // 没变化就不重绘
+            lastValues[item] = value
+            si.button?.attributedTitle = makeMetricTitle(label: item.label, value: value)
         }
-        if items.contains(.mem) {
-            top.append(Fmt.gb(snap.memUsed) + "G")
-        }
-        if items.contains(.disk) {
-            let ratio = snap.diskTotal > 0
-                ? Double(snap.diskTotal - snap.diskFree) / Double(snap.diskTotal) : 0
-            top.append("盘\(Fmt.percent(ratio))%")
-        }
-        if items.contains(.net) {
-            bottom.append("↓\(Fmt.compactRate(snap.netDown))↑\(Fmt.compactRate(snap.netUp))")
-        }
-
-        // 只有一行内容时不留空行
-        let lines = [top.joined(separator: " "), bottom.joined(separator: " ")]
-            .filter { !$0.isEmpty }
-        let key = lines.joined(separator: "\n")
-        guard key != lastTitle else { return }
-        lastTitle = key
-        statusItem.button?.attributedTitle = makeStatusTitle(lines)
     }
 
     // MARK: 交互
@@ -150,6 +191,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel.syncCheckboxes()
         if let snap = latest { panel.apply(snap) }
+        // 尺寸在 selectTab 后会变化，显示前同步
+        popover.contentSize = panel.preferredSize
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         NSApp.activate(ignoringOtherApps: true)
@@ -164,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quit = NSMenuItem(title: "退出 Glance", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        sender.menu = menu
         menu.popUp(positioning: nil,
                    at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
@@ -220,6 +264,10 @@ if CommandLine.arguments.contains("--dump") {
     磁盘       : 已用 \(Fmt.bytes(Double(snap.diskTotal - snap.diskFree))) / \(Fmt.bytes(Double(snap.diskTotal)))
     磁盘 IO    : 读 \(Fmt.rate(snap.diskRead))  写 \(Fmt.rate(snap.diskWrite))
     CPU 温度   : \(temp) °C
+    磁盘温度   : \(snap.diskTemp.map { String(format: "%.1f", $0) } ?? "不可用") °C
+    GPU 温度   : \(snap.gpuTemp.map { String(format: "%.1f", $0) } ?? "不可用") °C
+    GPU 占用   : \(snap.gpuUtil.map { String(format: "%.0f%%", $0 * 100) } ?? "不可用")
+    系统功耗   : \(snap.power.map { String(format: "%.1f", $0) } ?? "不可用") W
     风扇       : \(fan)
     已运行     : \(Fmt.uptime(snap.uptime))
     """)

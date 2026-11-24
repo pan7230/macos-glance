@@ -5,6 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="Glance"
+MIN_VER="13.0"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 SOURCES=(Sources/*.swift)
@@ -17,10 +18,14 @@ echo "==> 编译 Swift 源码（通用二进制）"
 BINARIES=()
 for ARCH in arm64 x86_64; do
   echo "    - ${ARCH}"
+  echo "    - C 模块 (${ARCH})"
+  clang -O2 -target "${ARCH}-apple-macos${MIN_VER}" -c Sources/c/ioreport.c \
+    -o "$BUILD_DIR/obj/ioreport-$ARCH.o"
   swiftc -O -swift-version 5 \
     -target "${ARCH}-apple-macosx13.0" \
     "${FRAMEWORKS[@]}" \
     "${SOURCES[@]}" \
+    "$BUILD_DIR/obj/ioreport-$ARCH.o" \
     -o "$BUILD_DIR/obj/$APP_NAME-$ARCH"
   BINARIES+=("$BUILD_DIR/obj/$APP_NAME-$ARCH")
 done
