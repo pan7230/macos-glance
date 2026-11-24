@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.attributedTitle = makeStatusTitle("启动中")
+            button.attributedTitle = makeStatusTitle(["启动中"])
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -100,28 +100,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateBar(_ snap: Snapshot) {
-        var parts: [String] = []
         let items = Settings.shared.barItems
 
+        // 第一行：CPU / 内存 / 磁盘；第二行：网络
+        var top: [String] = []
+        var bottom: [String] = []
+
         if items.contains(.cpu) {
-            parts.append("\(Fmt.percent(snap.cpu))%")
+            top.append("CPU\(Fmt.percent(snap.cpu))%")
         }
         if items.contains(.mem) {
-            parts.append(Fmt.gb(snap.memUsed) + "G")
-        }
-        if items.contains(.net) {
-            parts.append("↓\(Fmt.compactRate(snap.netDown))↑\(Fmt.compactRate(snap.netUp))")
+            top.append(Fmt.gb(snap.memUsed) + "G")
         }
         if items.contains(.disk) {
             let ratio = snap.diskTotal > 0
                 ? Double(snap.diskTotal - snap.diskFree) / Double(snap.diskTotal) : 0
-            parts.append("盘\(Fmt.percent(ratio))%")
+            top.append("盘\(Fmt.percent(ratio))%")
+        }
+        if items.contains(.net) {
+            bottom.append("↓\(Fmt.compactRate(snap.netDown))↑\(Fmt.compactRate(snap.netUp))")
         }
 
-        let text = parts.isEmpty ? "—" : parts.joined(separator: "  ")
-        guard text != lastTitle else { return }
-        lastTitle = text
-        statusItem.button?.attributedTitle = makeStatusTitle(text)
+        // 只有一行内容时不留空行
+        let lines = [top.joined(separator: " "), bottom.joined(separator: " ")]
+            .filter { !$0.isEmpty }
+        let key = lines.joined(separator: "\n")
+        guard key != lastTitle else { return }
+        lastTitle = key
+        statusItem.button?.attributedTitle = makeStatusTitle(lines)
     }
 
     // MARK: 交互

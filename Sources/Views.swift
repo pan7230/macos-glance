@@ -205,12 +205,22 @@ final class MetricRow: NSView {
 
 // MARK: - 菜单栏标题（用系统原生 attributedTitle，自动适配深浅色）
 
-func makeStatusTitle(_ text: String) -> NSAttributedString {
-    let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-    return NSAttributedString(string: text, attributes: [
+/// 菜单栏标题：支持上下双行，行高与行距固定，避免在菜单栏里忽上忽下。
+func makeStatusTitle(_ lines: [String]) -> NSAttributedString {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    // 固定每行高度与行距，保证两行间距恒定、垂直居中
+    let style = NSMutableParagraphStyle()
+    style.alignment = .center
+    style.lineSpacing = 0
+    style.minimumLineHeight = 10
+    style.maximumLineHeight = 10
+    let attrs: [NSAttributedString.Key: Any] = [
         .font: font,
-        .foregroundColor: NSColor.labelColor
-    ])
+        .foregroundColor: NSColor.labelColor,
+        .paragraphStyle: style
+    ]
+    let text = lines.isEmpty ? "—" : lines.joined(separator: "\n")
+    return NSAttributedString(string: text, attributes: attrs)
 }
 
 // 保留：模板图版本（back-up，当前未使用）
