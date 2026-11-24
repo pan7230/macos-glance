@@ -203,7 +203,17 @@ final class MetricRow: NSView {
     }
 }
 
-// MARK: - 菜单栏图标（模板图，自动适配深浅色菜单栏）
+// MARK: - 菜单栏标题（用系统原生 attributedTitle，自动适配深浅色）
+
+func makeStatusTitle(_ text: String) -> NSAttributedString {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    return NSAttributedString(string: text, attributes: [
+        .font: font,
+        .foregroundColor: NSColor.labelColor
+    ])
+}
+
+// 保留：模板图版本（back-up，当前未使用）
 
 func makeStatusImage(text: String) -> NSImage {
     let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)

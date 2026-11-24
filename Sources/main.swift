@@ -58,8 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.image = makeStatusImage(text: "启动中")
-            button.imagePosition = .imageOnly
+            button.attributedTitle = makeStatusTitle("启动中")
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -121,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let text = parts.isEmpty ? "—" : parts.joined(separator: "  ")
         guard text != lastTitle else { return }
         lastTitle = text
-        statusItem.button?.image = makeStatusImage(text: text)
+        statusItem.button?.attributedTitle = makeStatusTitle(text)
     }
 
     // MARK: 交互
