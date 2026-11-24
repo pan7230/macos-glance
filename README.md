@@ -22,10 +22,16 @@
 | CPU 温度 | IOHID 私有接口（只读，无需授权），取全部 tdie 核心传感器最高值 |
 | 风扇 | SMC `F0Ac`，无风扇机型自动隐藏为"无风扇机型" |
 
+## 下载安装
+
+- **现成安装包**：[Releases 页面](https://github.com/pan7230/macos-glance/releases) 下载 `Glance.zip`，解压后把 `Glance.app` 拖到「应用程序」文件夹即可。
+- ad-hoc 签名，首次打开若被 Gatekeeper 拦截：右键 → 打开。
+- 源码自行构建：`./build.sh` 产出通用二进制（arm64 + x86_64，约 456KB）。
+
 ## 构建 / 运行
 
 ```bash
-./build.sh                    # 编译打包，产物 build/Glance.app（约 236KB）
+./build.sh                    # 编译打包，产物 build/Glance.app（通用二进制）
 open build/Glance.app         # 启动
 ./build/Glance.app/Contents/MacOS/Glance --dump   # 命令行诊断：输出一次完整采样
 ```
@@ -34,6 +40,8 @@ open build/Glance.app         # 启动
 
 1. 把 `build/Glance.app` 拖到「应用程序」文件夹；
 2. 启动后点开面板，勾选「开机自启」。
+
+CI：推送 `v*` 标签会自动构建并把 `Glance.zip` 发布到 Releases（见 `.github/workflows/build.yml`）。
 
 ## 建议
 
