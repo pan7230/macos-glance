@@ -17,15 +17,15 @@ enum Fmt {
         bytes(v) + "/s"
     }
 
-    /// 菜单栏用的极简写法：1.2M / 860K / 0B
+    /// 菜单栏用的紧凑速率：33 KB/s / 1.2 MB/s（MangoDisk 风格）
     static func compactRate(_ v: Double) -> String {
-        let units = ["B", "K", "M", "G"]
+        let units = ["B", "KB", "MB", "GB"]
         var value = max(0, v)
         var i = 0
         while value >= 1024, i < units.count - 1 { value /= 1024; i += 1 }
-        if i == 0 { return "0B" }
-        let decimals: Int = value >= 100 ? 0 : 1
-        return String(format: "%.\(decimals)f%@", value, units[i])
+        if value < 0.05 { return "0 B/s" }
+        let decimals: Int = (i == 0 || value >= 100) ? 0 : (value >= 10 ? 0 : 1)
+        return String(format: "%.\(decimals)f %@/s", value, units[i])
     }
 
     static func gb(_ v: UInt64) -> String {
@@ -205,13 +205,16 @@ final class MetricRow: NSView {
 
 // MARK: - 菜单栏标题（用系统原生 attributedTitle，自动适配深浅色）
 
+/// MangoDisk 菜单栏配色：青绿色标签与数值
+private let mdTeal = NSColor(calibratedRed: 0.18, green: 0.62, blue: 0.49, alpha: 1.0)
+/// MangoDisk 网络配色：上传红、下载蓝
+private let mdUploadRed = NSColor(calibratedRed: 0.95, green: 0.26, blue: 0.21, alpha: 1.0)
+private let mdDownloadBlue = NSColor(calibratedRed: 0.13, green: 0.48, blue: 0.95, alpha: 1.0)
+
 /// MangoDisk 风格菜单栏项：上行小标签 + 下行数值，青绿色，行高固定。
-/// 用 attributedTitle 让系统处理菜单栏着色与布局；青绿色为固定色（与 MangoDisk 一致）。
 func makeMetricTitle(label: String, value: String) -> NSAttributedString {
-    // 菜单栏图标青绿色（MangoDisk 观感）
-    let teal = NSColor(calibratedRed: 0.23, green: 0.62, blue: 0.64, alpha: 1.0)
     let labelFont = NSFont.systemFont(ofSize: 7.5, weight: .semibold)
-    let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+    let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
 
     let style = NSMutableParagraphStyle()
     style.alignment = .center
@@ -222,15 +225,49 @@ func makeMetricTitle(label: String, value: String) -> NSAttributedString {
     let result = NSMutableAttributedString()
     result.append(NSAttributedString(string: label, attributes: [
         .font: labelFont,
-        .foregroundColor: teal.withAlphaComponent(0.85),
+        .foregroundColor: mdTeal.withAlphaComponent(0.85),
         .paragraphStyle: style
     ]))
     result.append(NSAttributedString(string: "\n" + value, attributes: [
         .font: valueFont,
-        .foregroundColor: teal,
+        .foregroundColor: mdTeal,
         .paragraphStyle: style
     ]))
     return result
+}
+
+/// MangoDisk 网络菜单栏项：上行红色↑上传，下行蓝色↓下载，无文字标签。
+func makeNetworkTitle(up: String, down: String) -> NSAttributedString {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    let style = NSMutableParagraphStyle()
+    style.alignment = .left
+    style.lineSpacing = 0
+    style.minimumLineHeight = 9
+    style.maximumLineHeight = 9
+
+    let result = NSMutableAttributedString()
+    result.append(NSAttributedString(string: "↑ \(up)", attributes: [
+        .font: font, .foregroundColor: mdUploadRed, .paragraphStyle: style
+    ]))
+    result.append(NSAttributedString(string: "\n↓ \(down)", attributes: [
+        .font: font, .foregroundColor: mdDownloadBlue, .paragraphStyle: style
+    ]))
+    return result
+}
+
+/// 面板里使用的同一套配色
+enum MDColor {
+    static let teal = mdTeal
+    static let orange = NSColor(calibratedRed: 1.0, green: 0.42, blue: 0.03, alpha: 1.0)
+    static let orangeSoft = NSColor(calibratedRed: 1.0, green: 0.42, blue: 0.03, alpha: 0.14)
+    static let blue = mdDownloadBlue
+    static let red = mdUploadRed
+    static let green = NSColor(calibratedRed: 0.20, green: 0.65, blue: 0.30, alpha: 1.0)
+    static let panelBG = NSColor(calibratedWhite: 0.965, alpha: 1.0)
+    static let cardBG = NSColor.white
+    static let cardBorder = NSColor(calibratedWhite: 0.89, alpha: 1.0)
+    static let text = NSColor(calibratedWhite: 0.13, alpha: 1.0)
+    static let subText = NSColor(calibratedWhite: 0.48, alpha: 1.0)
 }
 
 // 保留：模板图版本（back-up，当前未使用）

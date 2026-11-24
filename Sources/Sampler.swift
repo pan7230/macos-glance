@@ -22,6 +22,7 @@ struct Snapshot {
     var gpuUtil: Double? = nil       // GPU 占用 0...1（IOReport）
     var power: Double? = nil         // 系统功耗 W（IOReport）
     var uptime: TimeInterval = 0
+    var processes: [ProcInfo] = []   // 进程级 CPU/内存
     var time: Date = Date()
 }
 
@@ -44,6 +45,7 @@ final class Sampler {
     private let tempReader = HIDTemperatureReader()
     private let smcReader = SMCReader()
     private let ioReader = IOReportReader()
+    private let procSampler = ProcessSampler()
 
     init() {
         // 预热一次，避免第一次采样没有基线而显示 0
@@ -95,6 +97,7 @@ final class Sampler {
         let ioreport = ioReader.sample()
         snap.gpuUtil = ioreport.gpu
         snap.power = ioreport.power
+        snap.processes = procSampler.sample()
         return snap
     }
 

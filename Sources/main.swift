@@ -108,6 +108,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startTimer()
+
+        // 诊断：--popover 启动后自动弹出面板，便于截图验证布局
+        if CommandLine.arguments.contains("--popover"), let item = statusItems[.cpu], let button = item.button {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                guard let self else { return }
+                self.panel.syncCheckboxes()
+                if let snap = self.latest { self.panel.apply(snap) }
+                if let tabArg = CommandLine.arguments.first(where: { $0.hasPrefix("--tab=") }) {
+                    let name = String(tabArg.dropFirst("--tab=".count))
+                    self.panel.selectTabForDiagnostics(name)
+                }
+                self.popover.contentSize = self.panel.preferredSize
+                self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                self.popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     // MARK: 采样循环
@@ -160,14 +177,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .gpuTemp: snap.gpuTemp.map { "\(Int($0.rounded()))°" } ?? "—",
             .mem: "\(Fmt.percent(memPct))%",
             .diskTemp: snap.diskTemp.map { "\(Int($0.rounded()))°" } ?? "—",
-            .net: "↓\(Fmt.compactRate(snap.netDown))↑\(Fmt.compactRate(snap.netUp))",
+            .net: "↑\(Fmt.compactRate(snap.netUp))↓\(Fmt.compactRate(snap.netDown))",
             .power: snap.power.map { "\(String(format: "%.0f", $0))W" } ?? "—"
         ]
         for (item, value) in values {
             guard let si = statusItems[item] else { continue }
             guard lastValues[item] != value else { continue }  // 没变化就不重绘
             lastValues[item] = value
-            si.button?.attributedTitle = makeMetricTitle(label: item.label, value: value)
+            if item == .net {
+                // MangoDisk 网络项：上行红↑上传、下行蓝↓下载，无标签
+                let parts = value.dropFirst().split(whereSeparator: { $0 == "↑" || $0 == "↓" })
+                let up = parts.count > 0 ? String(parts[0]) : "0 B/s"
+                let down = parts.count > 1 ? String(parts[1]) : "0 B/s"
+                si.button?.attributedTitle = makeNetworkTitle(up: up, down: down)
+            } else {
+                si.button?.attributedTitle = makeMetricTitle(label: item.label, value: value)
+            }
         }
     }
 
@@ -250,6 +275,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: 入口
 
+// 命令行诊断：把指定标签页渲染成 PNG 保存，绕开状态栏/窗口遮挡问题
+if let renderArg = CommandLine.arguments.first(where: { $0.hasPrefix("--render=") }) {
+    let tabName = String(renderArg.dropFirst("--render=".count))
+    let s = Sampler()
+    usleep(1_200_000)
+    let snap = s.sample()
+    let panel = PanelViewController()
+    _ = panel.view                       // 触发 loadView + viewDidLoad
+    panel.selectTabForDiagnostics(tabName)
+    panel.apply(snap)
+    panel.view.frame = NSRect(origin: .zero, size: panel.preferredSize)
+    panel.view.layoutSubtreeIfNeeded()
+    if let rep = panel.view.bitmapImageRepForCachingDisplay(in: panel.view.bounds) {
+        panel.view.cacheDisplay(in: panel.view.bounds, to: rep)
+        if let tiff = rep.tiffRepresentation, let img = NSBitmapImageRep(data: tiff),
+           let png = img.representation(using: .png, properties: [:]) {
+            let path = "/tmp/glance_render_\(tabName).png"
+            try? png.write(to: URL(fileURLWithPath: path))
+            print("rendered \(path) size=\(panel.preferredSize)")
+        }
+    }
+    exit(0)
+}
+
 // 命令行诊断模式：Glance --dump 输出一次完整采样后退出
 if CommandLine.arguments.contains("--dump") {
     let s = Sampler()
@@ -270,6 +319,8 @@ if CommandLine.arguments.contains("--dump") {
     系统功耗   : \(snap.power.map { String(format: "%.1f", $0) } ?? "不可用") W
     风扇       : \(fan)
     已运行     : \(Fmt.uptime(snap.uptime))
+    进程 sample: \(snap.processes.count) 个
+    \(snap.processes.sorted { $0.cpu > $1.cpu }.prefix(5).map { "  \($0.name)  CPU \(String(format: "%.1f%%", $0.cpu * 100))  MEM \(Fmt.bytes(Double($0.memory)))" }.joined(separator: "\n"))
     """)
     exit(0)
 }

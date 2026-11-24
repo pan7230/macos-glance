@@ -21,11 +21,14 @@ for ARCH in arm64 x86_64; do
   echo "    - C 模块 (${ARCH})"
   clang -O2 -target "${ARCH}-apple-macos${MIN_VER}" -c Sources/c/ioreport.c \
     -o "$BUILD_DIR/obj/ioreport-$ARCH.o"
+  clang -O2 -target "${ARCH}-apple-macos${MIN_VER}" -c Sources/c/procs.c \
+    -o "$BUILD_DIR/obj/procs-$ARCH.o"
   swiftc -O -swift-version 5 \
     -target "${ARCH}-apple-macosx13.0" \
     "${FRAMEWORKS[@]}" \
     "${SOURCES[@]}" \
     "$BUILD_DIR/obj/ioreport-$ARCH.o" \
+    "$BUILD_DIR/obj/procs-$ARCH.o" \
     -o "$BUILD_DIR/obj/$APP_NAME-$ARCH"
   BINARIES+=("$BUILD_DIR/obj/$APP_NAME-$ARCH")
 done
