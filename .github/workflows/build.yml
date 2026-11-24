@@ -1,0 +1,35 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 编译打包
+        run: ./build.sh
+
+      - name: 压缩成可分发安装包
+        run: ditto -c -k --keepParent build/Glance.app Glance.zip
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Glance-app
+          path: Glance.zip
+
+      - name: 打 tag 时创建 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Glance.zip
+          generate_release_notes: true
