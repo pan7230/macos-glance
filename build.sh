@@ -1,22 +1,32 @@
 #!/bin/bash
 # 编译并打包 Glance.app（无需 Xcode，只用 Command Line Tools）
+# 产物为通用二进制（arm64 + x86_64），Intel 与 Apple Silicon 都能运行
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="Glance"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
-ARCH="$(uname -m)"
+SOURCES=(Sources/*.swift)
+FRAMEWORKS=(-framework Cocoa -framework IOKit -framework ServiceManagement)
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$BUILD_DIR/obj"
 
-echo "==> 编译 Swift 源码"
-swiftc -O -swift-version 5 \
-  -target "${ARCH}-apple-macosx13.0" \
-  -framework Cocoa -framework IOKit -framework ServiceManagement \
-  Sources/*.swift \
-  -o "$APP/Contents/MacOS/$APP_NAME"
+echo "==> 编译 Swift 源码（通用二进制）"
+BINARIES=()
+for ARCH in arm64 x86_64; do
+  echo "    - ${ARCH}"
+  swiftc -O -swift-version 5 \
+    -target "${ARCH}-apple-macosx13.0" \
+    "${FRAMEWORKS[@]}" \
+    "${SOURCES[@]}" \
+    -o "$BUILD_DIR/obj/$APP_NAME-$ARCH"
+  BINARIES+=("$BUILD_DIR/obj/$APP_NAME-$ARCH")
+done
+
+lipo -create -output "$APP/Contents/MacOS/$APP_NAME" "${BINARIES[@]}"
+rm -rf "$BUILD_DIR/obj"
 
 echo "==> 写入 Info.plist"
 cp Info.plist "$APP/Contents/Info.plist"
@@ -29,4 +39,4 @@ fi
 echo "==> 临时签名（ad-hoc）"
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1
 
-echo "==> 完成：$APP  ($(du -sh "$APP" | cut -f1))"
+echo "==> 完成：$APP  ($(du -sh "$APP" | cut -f1), $(lipo -archs "$APP/Contents/MacOS/$APP_NAME"))"
