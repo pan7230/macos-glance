@@ -39,7 +39,12 @@ open build/Glance.app         # 启动
 ## 安装与自启
 
 1. 把 `build/Glance.app` 拖到「应用程序」文件夹；
-2. 启动后点开面板，勾选「开机自启」。
+2. 启动后点开面板，勾选「开机自启」（走系统 SMAppService）。
+
+若当前会话无法向 launchd 注册（例如远程/受限会话里点开关没生效），可改用 LaunchAgent：
+在 `~/Library/LaunchAgents/com.pangu.glance.autostart.plist` 放入 `RunAtLoad=true`、
+`ProgramArguments` 指向 `/Applications/Glance.app/Contents/MacOS/Glance` 的配置，下次登录自动生效。
+注意这两种机制是独立的：用了 LaunchAgent 就不要再勾面板里的开关，否则会启动两个实例。
 
 CI：推送 `v*` 标签会自动构建并把 `Glance.zip` 发布到 Releases（见 `.github/workflows/build.yml`）。
 
