@@ -61,7 +61,10 @@ final class PanelViewController: NSViewController {
         addRow(diskRow, to: stack, widthOf: stack)
         addRow(tempRow, to: stack, widthOf: stack)
 
-        stack.addArrangedSubview(separator(widthOf: stack))
+        let sep1 = separator(widthOf: stack)
+        stack.addArrangedSubview(sep1)
+        sep1.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        sep1.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         stack.addArrangedSubview(sectionLabel("菜单栏显示"))
 
         let boxes = NSStackView()
@@ -78,7 +81,10 @@ final class PanelViewController: NSViewController {
         }
         stack.addArrangedSubview(boxes)
 
-        stack.addArrangedSubview(separator(widthOf: stack))
+        let sep2 = separator(widthOf: stack)
+        stack.addArrangedSubview(sep2)
+        sep2.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        sep2.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         loginCheck.font = .systemFont(ofSize: 11.5)
         loginCheck.controlSize = .small
@@ -125,11 +131,12 @@ final class PanelViewController: NSViewController {
     }
 
     private func separator(widthOf stack: NSStackView) -> NSView {
-        let box = NSBox()
-        box.boxType = .separator
-        box.heightAnchor.constraint(equalToConstant: 1).isActive = true
-        box.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        return box
+        // 用普通 NSView 画细线，避免 NSBox.separator 与 stack 宽度约束互相求解死锁
+        let line = NSView()
+        line.translatesAutoresizingMaskIntoConstraints = false
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        return line
     }
 
     // MARK: 刷新

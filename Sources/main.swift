@@ -64,7 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        _ = panel.view    // 提前构建界面，拿到尺寸
+        // 不在启动时强制构建 panel.view：popover 首次显示时会自行懒加载，
+        // 避免在 applicationDidFinishLaunching 阶段做多余的布局计算。
         popover.contentSize = panel.preferredSize
 
         panel.onToggleBarItem = { [weak self] item, on in
